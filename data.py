@@ -2,7 +2,21 @@
 import datasets
 import pandas as pd
 from datasets import load_dataset, Dataset, DatasetDict
+from model import sep,tok_func
+import numpy as np
+from pathlib import Path
+import os
 
+iskaggle = os.environ.get('KAGGLE_KERNEL_RUN_TYPE', '')
+if not iskaggle:
+    import zipfile,kaggle
+    path = Path('feedback-prize-effectiveness')
+    kaggle.api.competition_download_cli(str(path))
+    zipfile.ZipFile(f'{path}.zip').extractall(path)
+
+
+if iskaggle: path = Path('../input/feedback-prize-effectiveness')
+path.ls()
 
 df = pd.read_csv(path/'train.csv')
 df.head()
@@ -28,7 +42,7 @@ ds = Dataset.from_pandas(df)
 
 """Let's see what one example looks like when tokenized:"""
 
-tok_func(ds[0])
+#tok_func(ds[0])
 
 """We can now tokenize the  the input. We'll use `Dataset.map` to speed it up, and remove the columns we no longer need:"""
 

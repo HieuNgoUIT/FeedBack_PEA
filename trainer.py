@@ -1,6 +1,16 @@
 from sklearn.metrics import log_loss
+import torch
 import torch.nn.functional as F
-def score(preds): return {'log loss': log_loss(preds.label_ids, F.softmax(torch.Tensor(preds.predictions)))}
+from transformers import AutoModelForSequenceClassification, Trainer, TrainingArguments
+from model import model_nm,tokz
+from data import dds 
+
+# from pathlib import Path
+# import os
+
+
+def score(preds): 
+    return {'log loss': log_loss(preds.label_ids, F.softmax(torch.Tensor(preds.predictions)))}
 
 """Now we can create our model and trainer. HuggingFace uses the `TrainingArguments` class to set up arguments. We'll use a cosine scheduler with warmup. We'll use fp16 since it's much faster on modern GPUs, and saves some memory. We evaluate using double-sized batches, since no gradients are stored so we can do twice as many rows at a time."""
 
