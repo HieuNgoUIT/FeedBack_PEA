@@ -11,7 +11,7 @@ warnings.simplefilter('ignore')
 logging.disable(logging.WARNING)
 
 
-model_nm = '../input/debertav3small'
+model_nm = 'microsoft/deberta-v3-small'
 
 """We now get the tokenizer for our model:"""
 

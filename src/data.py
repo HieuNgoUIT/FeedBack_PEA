@@ -7,16 +7,16 @@ import numpy as np
 from pathlib import Path
 import os
 
-iskaggle = os.environ.get('KAGGLE_KERNEL_RUN_TYPE', '')
-if not iskaggle:
-    import zipfile,kaggle
-    path = Path('feedback-prize-effectiveness')
-    kaggle.api.competition_download_cli(str(path))
-    zipfile.ZipFile(f'{path}.zip').extractall(path)
+# iskaggle = os.environ.get('KAGGLE_KERNEL_RUN_TYPE', '')
+# if not iskaggle:
+#     import zipfile,kaggle
+#     path = Path('feedback-prize-effectiveness')
+#     kaggle.api.competition_download_cli(str(path))
+#     zipfile.ZipFile(f'{path}.zip').extractall(path)
 
 
-if iskaggle: path = Path('../input/feedback-prize-effectiveness')
-path.ls()
+# if iskaggle: path = Path('../input/feedback-prize-effectiveness')
+path = "data"
 
 df = pd.read_csv(path/'train.csv')
 df.head()
