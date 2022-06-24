@@ -18,7 +18,7 @@ import os
 # if iskaggle: path = Path('../input/feedback-prize-effectiveness')
 path = "data"
 
-df = pd.read_csv(path/'train.csv')
+df = pd.read_csv(path + '/train.csv')
 df.head()
 
 
