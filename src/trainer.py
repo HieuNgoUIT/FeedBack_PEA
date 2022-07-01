@@ -1,31 +1,77 @@
-from sklearn.metrics import log_loss
-import torch
-import torch.nn.functional as F
-from transformers import AutoModelForSequenceClassification, Trainer, TrainingArguments
-from model import model_nm,tokz
-from data import dds 
-
-# from pathlib import Path
-# import os
+# Initialize
+NUM_JOBS = 12
+seed_everything(42)
+os.makedirs(cfg.output, exist_ok=True)
 
 
-def score(preds): 
-    return {'log loss': log_loss(preds.label_ids, F.softmax(torch.Tensor(preds.predictions)))}
 
-"""Now we can create our model and trainer. HuggingFace uses the `TrainingArguments` class to set up arguments. We'll use a cosine scheduler with warmup. We'll use fp16 since it's much faster on modern GPUs, and saves some memory. We evaluate using double-sized batches, since no gradients are stored so we can do twice as many rows at a time."""
+# Create fold
+df = pd.read_csv(os.path.join(cfg.input, "train.csv"))
+gkf = GroupKFold(n_splits=cfg.fold_num)
+for fold, ( _, val_) in enumerate(gkf.split(X=df, groups=df.essay_id)):
+    df.loc[val_ , "kfold"] = int(fold)
 
-lr,bs = 8e-5,16
-wd,epochs = 0.01,1
+df["kfold"] = df["kfold"].astype(int)
+df.groupby('kfold')['discourse_effectiveness'].value_counts()
 
-def get_trainer(dds):
-    args = TrainingArguments('outputs', learning_rate=lr, warmup_ratio=0.1, lr_scheduler_type='cosine', fp16=True,
-        evaluation_strategy="epoch", per_device_train_batch_size=bs, per_device_eval_batch_size=bs*2,
-        num_train_epochs=epochs, weight_decay=wd, report_to='none')
-    model = AutoModelForSequenceClassification.from_pretrained(model_nm, num_labels=3)
-    return Trainer(model, args, train_dataset=dds['train'], eval_dataset=dds['test'],
-                   tokenizer=tokz, compute_metrics=score)
 
-"""Let's train!"""
+# DataSet Preparation
+train_df = df[df["kfold"] != cfg.val_fold].reset_index(drop=True)
+valid_df = df[df["kfold"] == cfg.val_fold].reset_index(drop=True)
 
-trainer = get_trainer(dds)
-trainer.train()
+tokenizer = AutoTokenizer.from_pretrained(cfg.model, use_fast=True)
+training_samples = prepare_training_data(train_df, tokenizer, cfg, num_jobs=NUM_JOBS, is_train=True)
+valid_samples = prepare_training_data(valid_df, tokenizer, cfg, num_jobs=NUM_JOBS, is_train=True)
+
+training_samples = list(sorted(training_samples, key=lambda d: len(d["input_ids"])))
+valid_samples = list(sorted(valid_samples, key=lambda d: len(d["input_ids"])))
+
+train_dataset = FeedbackDataset(training_samples, cfg, tokenizer)
+valid_dataset = FeedbackDataset(valid_samples, cfg, tokenizer)
+
+num_train_steps = int(len(train_dataset) / cfg.batch_size / cfg.accumulation_steps * cfg.epochs)
+
+collate_fn = Collate(tokenizer, cfg)
+
+
+# Model Preparation
+model = FeedbackModel(
+    model_name=cfg.model,
+    num_train_steps=num_train_steps,
+    learning_rate=cfg.lr,
+    num_labels=3,
+    steps_per_epoch=len(train_dataset) / cfg.batch_size,
+    gpu_optimize_config=cfg.gpu_optimize_config,
+)
+model = Tez(model)
+
+
+# Training
+es = EarlyStopping(
+    monitor="valid_loss",
+    model_path=os.path.join(cfg.output, f"model_f{cfg.val_fold}.bin"),
+    patience=5,
+    mode="min",
+    delta=0.001,
+    save_weights_only=True,
+)
+
+train_config = TezConfig(
+    training_batch_size=cfg.batch_size,
+    validation_batch_size=cfg.valid_batch_size,
+    gradient_accumulation_steps=cfg.accumulation_steps,
+    epochs=cfg.epochs,
+    fp16=cfg.gpu_optimize_config.fp16,
+    step_scheduler_after="batch",
+    val_strategy="batch",
+    val_steps=cfg.val_steps,
+)
+
+model.fit(
+    train_dataset,
+    valid_dataset=valid_dataset,
+    train_collate_fn=collate_fn,
+    valid_collate_fn=collate_fn,
+    callbacks=[es],
+    config=train_config,
+)
