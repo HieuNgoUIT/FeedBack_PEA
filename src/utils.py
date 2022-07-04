@@ -1,3 +1,16 @@
+import argparse
+import os
+import random
+import numpy as np
+import torch
+from joblib import Parallel, delayed
+from tqdm import tqdm
+from sklearn import datasets
+from sklearn import model_selection
+import pandas as pd
+
+LABEL_MAPPING = {"Ineffective": 0, "Adequate": 1, "Effective": 2}
+
 def seed_everything(seed: int):
     random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -10,22 +23,21 @@ def seed_everything(seed: int):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, required=True)
     parser.add_argument("--fold", type=int, required=False, default=0)
-    #parser.add_argument("--model", type=str, required=False, default="microsoft/deberta-base")
-    #parser.add_argument("--lr", type=float, required=False, default=3e-5)
+    parser.add_argument("--model", type=str, required=False, default="microsoft/deberta-base")
+    parser.add_argument("--lr", type=float, required=False, default=3e-5)
     parser.add_argument("--output", type=str, default=".", required=False)
-    #parser.add_argument("--input", type=str, default="../input", required=False)
-    #parser.add_argument("--max_len", type=int, default=1024, required=False)
-    #parser.add_argument("--batch_size", type=int, default=2, required=False)
-    #parser.add_argument("--valid_batch_size", type=int, default=16, required=False)
-    #parser.add_argument("--epochs", type=int, default=5, required=False)
-    #parser.add_argument("--accumulation_steps", type=int, default=1, required=False)
-    #parser.add_argument("--predict", action="store_true", required=False)
+    parser.add_argument("--input", type=str, default="../input/feedback-prize-effectiveness", required=False)
+    parser.add_argument("--max_len", type=int, default=1024, required=False)
+    parser.add_argument("--batch_size", type=int, default=2, required=False)
+    parser.add_argument("--valid_batch_size", type=int, default=16, required=False)
+    parser.add_argument("--epochs", type=int, default=5, required=False)
+    parser.add_argument("--accumulation_steps", type=int, default=1, required=False)
+    parser.add_argument("--predict", action="store_true", required=False)
     return parser.parse_args()
 
 
-def _prepare_training_data_helper(cfg, tokenizer, df, is_train):
+def _prepare_training_data_helper(args, tokenizer, df, is_train):
     training_samples = []
     for _, row in tqdm(df.iterrows(), total=len(df)):
         idx = row["essay_id"]
@@ -33,9 +45,9 @@ def _prepare_training_data_helper(cfg, tokenizer, df, is_train):
         discourse_type = row["discourse_type"]
 
         if is_train:
-            filename = os.path.join(cfg.input, "train", idx + ".txt")
+            filename = os.path.join(args.input, "train", idx + ".txt")
         else:
-            filename = os.path.join(cfg.input, "test", idx + ".txt")
+            filename = os.path.join(args.input, "test", idx + ".txt")
 
         with open(filename, "r") as f:
             text = f.read()
@@ -66,13 +78,13 @@ def _prepare_training_data_helper(cfg, tokenizer, df, is_train):
     return training_samples
 
 
-def prepare_training_data(df, tokenizer, cfg, num_jobs, is_train):
+def prepare_training_data(df, tokenizer, args, num_jobs, is_train):
     training_samples = []
 
     df_splits = np.array_split(df, num_jobs)
 
     results = Parallel(n_jobs=num_jobs, backend="multiprocessing")(
-        delayed(_prepare_training_data_helper)(cfg, tokenizer, df, is_train) for df in df_splits
+        delayed(_prepare_training_data_helper)(args, tokenizer, df, is_train) for df in df_splits
     )
     for result in results:
         training_samples.extend(result)
@@ -80,25 +92,34 @@ def prepare_training_data(df, tokenizer, cfg, num_jobs, is_train):
     return training_samples
 
 
-def freeze(module):
-    """
-    Freezes module's parameters.
-    """
+def create_folds(data, num_splits):
+    # we create a new column called kfold and fill it with -1
+    data["kfold"] = -1
     
-    for parameter in module.parameters():
-        parameter.requires_grad = False
-        
+    # the next step is to randomize the rows of the data
+    data = data.sample(frac=1).reset_index(drop=True)
 
-def set_embedding_parameters_bits(embeddings_path, optim_bits=32):
-    """
-    https://github.com/huggingface/transformers/issues/14819#issuecomment-1003427930
-    """
+    # I create a variable so we can stratify on discourse type and effectiveness score at the same time
+    data['discourse_type_score'] = data['discourse_type'] + '_' + data['discourse_effectiveness']
     
-    embedding_types = ("word", "position", "token_type")
-    for embedding_type in embedding_types:
-        attr_name = f"{embedding_type}_embeddings"
-        
-        if hasattr(embeddings_path, attr_name): 
-            bnb.optim.GlobalOptimManager.get_instance().register_module_override(
-                getattr(embeddings_path, attr_name), 'weight', {'optim_bits': optim_bits}
-            )
+    # initiate the kfold class from model_selection module
+    kf = model_selection.StratifiedGroupKFold(n_splits=num_splits, shuffle=True, random_state=42)
+    
+    # fill the new kfold column
+    # note that, instead of targets, we use bins!
+    for f, (t_, v_) in enumerate(kf.split(X=data, y=data['discourse_type_score'].values, groups=data['essay_id'])):
+        data.loc[v_, 'kfold'] = f
+    
+    # drop the bins column
+    data = data.drop("discourse_type_score", axis=1)
+
+    # return dataframe with folds
+    return data
+
+if __name__=="__main__":
+    # read training data
+    df = pd.read_csv("../input/feedback-prize-effectiveness/train.csv")
+    df = create_folds(df, num_splits=5)
+    #df.kfold.value_counts()
+    df.to_csv("train_folds.csv", index=False)
+    print('ok')
