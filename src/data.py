@@ -63,10 +63,3 @@ class Collate:
         return output
 
 
-if __name__=="__main__":
-    # read training data
-    df = pd.read_csv("input/feedback-prize-effectiveness/train.csv")
-    df = create_folds(df, num_splits=5)
-    #df.kfold.value_counts()
-    df.to_csv("train_folds.csv", index=False)
-    print('ok')
