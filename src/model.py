@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 from sklearn import metrics
 import bitsandbytes as bnb
-
+from torch.utils.checkpoint import checkpoint
 def freeze(module):
     """
     Freezes module's parameters.

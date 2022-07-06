@@ -4,7 +4,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
-
+from attrdict import AttrDict
 
 # from utils import EarlyStopping, prepare_training_data, target_id_map
 
@@ -157,7 +157,7 @@ if __name__ == "__main__":
     # Model Configs
     "model": "microsoft/deberta-v3-large",
     "max_len": 512,
-    
+    "fold" : 0,
     # Train Configs
     "fold_num": 5,
     "val_fold": 0,
@@ -177,11 +177,11 @@ if __name__ == "__main__":
     },
     
     # Path
-    "input": "/kaggle/input/feedback-prize-effectiveness",
-    "output": "/kaggle/working"
+    "input": "input/feedback-prize-effectiveness",
+    "output": "."
 }
     cfg = AttrDict(cfg)
-
+    main(cfg)
     # args = parse_args()
     # print(args)
     # if args.predict:
