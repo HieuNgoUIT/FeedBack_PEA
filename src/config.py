@@ -10,8 +10,8 @@ cfg = {
     #"val_fold": 0,
     "lr": 3e-6,
     "batch_size": 8,
-    "valid_batch_size": 32,
-    "epochs": 1, # Set to 1 because it is a demo
+    "valid_batch_size": 8,
+    "epochs": 5, # Set to 1 because it is a demo
     "accumulation_steps": 1,
     "val_steps": 1500,
     
