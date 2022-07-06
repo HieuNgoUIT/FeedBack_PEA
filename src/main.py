@@ -4,7 +4,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from attrdict import AttrDict
+
 
 # from utils import EarlyStopping, prepare_training_data, target_id_map
 
@@ -151,37 +151,13 @@ def predict(args):
     sample_submission.loc[:, "Effective"] = preds[:, 2]
     sample_submission.to_csv(f"preds_{args.fold}.csv", index=False)
 
+from config import cfg
 
 if __name__ == "__main__":
-    cfg = {
-    # Model Configs
-    "model": "microsoft/deberta-v3-large",
-    "max_len": 512,
-    "fold" : 0,
-    # Train Configs
-    "fold_num": 5,
-    "val_fold": 0,
-    "lr": 3e-6,
-    "batch_size": 8,
-    "valid_batch_size": 32,
-    "epochs": 1, # Set to 1 because it is a demo
-    "accumulation_steps": 1,
-    "val_steps": 375,
     
-    # GPU Optimize Settings
-    "gpu_optimize_config": {
-        "fp16": True,
-        "freezing": True,
-        "optim8bit": True,
-        "gradient_checkpoint": True
-    },
-    
-    # Path
-    "input": "input/feedback-prize-effectiveness",
-    "output": "."
-}
-    cfg = AttrDict(cfg)
-    main(cfg)
+    for i in range(5):
+        cfg.fold = i
+        main(cfg)
     # args = parse_args()
     # print(args)
     # if args.predict:
