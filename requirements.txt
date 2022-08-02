@@ -14,3 +14,4 @@ psutil
 tqdm
 AttrDict
 bitsandbytes-cuda113
+Jinja2
